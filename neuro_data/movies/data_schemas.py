@@ -162,8 +162,8 @@ class ConditionTier(dj.Computed):
         assert len(train_test) == 0, 'Train and test clips do overlap'
 
     def fill_up(self, tier, clips, cond, key, m):
-        existing = ConditionTier().proj() & (self & dict(tier=tier)) & (
-            stimulus.Trial() * stimulus.Condition() & dict(key, **cond))
+        existing = ConditionTier().proj() & (self & dict(tier=tier)) \
+            & (stimulus.Trial() * stimulus.Condition() & dict(key, **cond))
         n = len(existing)
         if n < m:
             # all hashes that are in clips but not registered for that animal and have the right tier
@@ -615,7 +615,7 @@ class MovieClips(dj.Computed, FilterMixin):
 #             behavior_clock = behavior_clock[:l]
 
 #         fr2beh = NaNSpline(frame_times, behavior_clock, k=1, ext=3)
-#         sampling_period = float((Preprocessing() & scan_key).proj(period='1/behavior_lowpass').fetch1('period'))
+#         sampling_period = float((Preprocessing() & scan_key).proj(period='1/behavior_lowpass').fetch1('period')) \TODO: Fix precision
 #         log.info('Downsampling eye signal to {}Hz'.format(1 / sampling_period))
 #         deye = np.nanmedian(np.diff(eye_time))
 #         h_eye = self.get_filter(sampling_period, deye, 'hamming', warning=True)
@@ -683,7 +683,7 @@ class MovieClips(dj.Computed, FilterMixin):
 #             behavior_clock = behavior_clock[:l]
 
 #         fr2beh = NaNSpline(frame_times, behavior_clock, k=1, ext=3)
-#         sampling_period = float((Preprocessing() & scan_key).proj(period='1/behavior_lowpass').fetch1('period'))
+#         sampling_period = float((Preprocessing() & scan_key).proj(period='1/behavior_lowpass').fetch1('period')) \TODO: Fix precision
 #         log.info('Downsampling eye signal to {}Hz'.format(1 / sampling_period))
 #         deye = np.nanmedian(np.diff(eye_time))
 #         h_eye = self.get_filter(sampling_period, deye, 'hamming', warning=True)
@@ -750,7 +750,7 @@ class MovieClips(dj.Computed, FilterMixin):
 #             behavior_clock = behavior_clock[:l]
 
 #         fr2beh = NaNSpline(frame_times, behavior_clock, k=1, ext=3)
-#         sampling_period = float((Preprocessing() & scan_key).proj(period='1/behavior_lowpass').fetch1('period'))
+#         sampling_period = float((Preprocessing() & scan_key).proj(period='1/behavior_lowpass').fetch1('period')) \ TODO: Fix Precision
 #         log.info('Downsampling treadmill signal to {}Hz'.format(1 / sampling_period))
 
 #         h_tread = self.get_filter(sampling_period, np.nanmedian(np.diff(treadmill_time)), 'hamming', warning=True)
