@@ -1,6 +1,5 @@
 import io
 from collections import OrderedDict
-from functools import partial
 from itertools import count
 from pprint import pformat
 
@@ -12,7 +11,7 @@ from scipy.signal import convolve2d
 from tqdm import tqdm
 
 from neuro_data.movies.transforms import Subsequence
-from .mixins import TraceMixin
+from .mixins import TraceMixin, BehaviorMixin
 from .schema_bridge import *
 from .. import logger as log
 from ..utils.data import SplineMovie, FilterMixin, SplineCurve, NaNSpline, fill_nans, h5cached
@@ -364,7 +363,7 @@ class InputResponse(dj.Computed, FilterMixin, TraceMixin):
 
         assert ConditionTier & scan_key, 'ConditionTier has not been populated'
         assert not (MovieClips.key_source & scan_key) - MovieClips, 'There are missing tuples in MovieClips'
-        
+
         flip_times, sample_times, fps0, trial_keys = (MovieScan() * MovieClips() * stimulus.Trial() & scan_key).fetch(
             'flip_times', 'sample_times', 'fps0', dj.key)
         flip_times = [ft.squeeze() for ft in flip_times]
@@ -531,193 +530,135 @@ class InputResponse(dj.Computed, FilterMixin, TraceMixin):
 #         return retval
 
 
-# class BehaviorMixin:
-#     def load_eye_traces_old(self, key):
-#         """
-#         Older method for loading eye traces, using FittedContour. Explicitly used by Eye2
-#         """
-#         r, center = (pupil.FittedContour.Ellipse() & key).fetch('major_r', 'center', order_by='frame_id ASC')
-#         detectedFrames = ~np.isnan(r)
-#         xy = np.full((len(r), 2), np.nan)
-#         xy[detectedFrames, :] = np.vstack(center[detectedFrames])
-#         xy = np.vstack(map(partial(fill_nans, preserve_gap=3), xy.T))
-#         if np.any(np.isnan(xy)):
-#             log.info('Keeping some nans in the pupil location trace')
-#         pupil_radius = fill_nans(r.squeeze(), preserve_gap=3)
-#         if np.any(np.isnan(pupil_radius)):
-#             log.info('Keeping some nans in the pupil radius trace')
+@schema
+class Eye(dj.Computed, FilterMixin, BehaviorMixin):
+    definition = """
+    # eye movement data
 
-#         eye_time = (pupil.Eye() & key).fetch1('eye_time').squeeze()
-#         return pupil_radius, xy, eye_time
+    -> InputResponse.Input
+    ---
+    -> pupil.FittedPupil
+    pupil              : blob@external   # pupil dilation trace
+    dpupil             : blob@external   # derivative of pupil dilation trace
+    center             : blob@external   # center position of the eye
+    """
 
-#     def load_eye_traces(self, key):
-#         r, center = (pupil.FittedPupil.Circle() & key).fetch('radius', 'center',
-#                                                              order_by='frame_id')
-#         #r, center = (pupil.FittedContour.Ellipse() & key).fetch('major_r', 'center', order_by='frame_id ASC')
-#         detectedFrames = ~np.isnan(r)
-#         xy = np.full((len(r), 2), np.nan)
-#         xy[detectedFrames, :] = np.vstack(center[detectedFrames])
-#         xy = np.vstack(map(partial(fill_nans, preserve_gap=3), xy.T))
-#         if np.any(np.isnan(xy)):
-#             log.info('Keeping some nans in the pupil location trace')
-#         pupil_radius = fill_nans(r.squeeze(), preserve_gap=3)
-#         if np.any(np.isnan(pupil_radius)):
-#             log.info('Keeping some nans in the pupil radius trace')
+    @property
+    def key_source(self):
+        return InputResponse & pupil.FittedPupil & stimulus.BehaviorSync
 
-#         eye_time = (pupil.Eye() & key).fetch1('eye_time').squeeze()
-#         return pupil_radius, xy, eye_time
+    def make(self, scan_key):
+        # pick out the "latest" tracking method to use for pupil info extraction
+        scan_key['tracking_method'] = (pupil.FittedPupil & scan_key).fetch(
+            'tracking_method', order_by='tracking_method')[-1]
+        log.info('Populating\n' + pformat(scan_key, indent=10))
+        radius, xy, eye_time = self.load_eye_traces(scan_key)
+        frame_times = InputResponse().load_frame_times(scan_key)
+        behavior_clock = self.load_behavior_timing(scan_key)
 
-#     def load_behavior_timing(self, key):
-#         log.info('Loading behavior frametimes')
-#         # -- find number of recording depths
-#         pipe = (fuse.Activity() & key).fetch('pipe')
-#         assert len(np.unique(pipe)) == 1, 'Selection is from different pipelines'
-#         pipe = dj.create_virtual_module(pipe[0], 'pipeline_' + pipe[0])
-#         k = dict(key)
-#         k.pop('field', None)
-#         ndepth = len(dj.U('z') & (pipe.ScanInfo.Field() & k))
-#         return (stimulus.BehaviorSync() & key).fetch1('frame_times').squeeze()[0::ndepth]
+        if len(frame_times) - len(behavior_clock) != 0:
+            assert abs(len(frame_times) - len(behavior_clock)) < 2, 'Difference bigger than 2 time points'
+            l = min(len(frame_times), len(behavior_clock))
+            log.info('Frametimes and stimulus.BehaviorSync differ in length! Shortening it.', depth=1)
+            frame_times = frame_times[:l]
+            behavior_clock = behavior_clock[:l]
 
-#     def load_treadmill_velocity(self, key):
-#         t, v = (treadmill.Treadmill() & key).fetch1('treadmill_time', 'treadmill_vel')
-#         return v.squeeze(), t.squeeze()
+        fr2beh = NaNSpline(frame_times, behavior_clock, k=1, ext=3)
+        sampling_period = 1 / float((Preprocessing & key).fetch1('behavior_lowpass'))
+        log.info('Downsampling eye signal to {}Hz'.format(1 / sampling_period))
+        deye = np.nanmedian(np.diff(eye_time))
+        h_eye = self.get_filter(sampling_period, deye, 'hamming', warning=True)
+        h_deye = self.get_filter(sampling_period, deye, 'dhamming', warning=True)
+        pupil_spline = NaNSpline(
+            eye_time, np.convolve(radius, h_eye, mode='same'), k=1, ext=0)
+        dpupil_spline = NaNSpline(
+            eye_time, np.convolve(radius, h_deye, mode='same'), k=1, ext=0)
+        center_spline = SplineCurve(
+            eye_time, np.vstack([np.convolve(coord, h_eye, mode='same') for coord in xy]), k=1, ext=0)
 
-# @schema
-# class Eye(dj.Computed, FilterMixin, BehaviorMixin):
-#     definition = """
-#     # eye movement data
-
-#     -> InputResponse.Input
-#     ---
-#     -> pupil.FittedPupil
-#     pupil              : external-data   # pupil dilation trace
-#     dpupil             : external-data   # derivative of pupil dilation trace
-#     center             : external-data   # center position of the eye
-#     """
-
-#     @property
-#     def key_source(self):
-#         return InputResponse & pupil.FittedPupil & stimulus.BehaviorSync
-
-#     def _make_tuples(self, scan_key):
-#         # pick out the "latest" tracking method to use for pupil info extraction
-#         scan_key['tracking_method'] = (pupil.FittedPupil & scan_key).fetch('tracking_method', order_by='tracking_method')[-1]
-#         log.info('Populating\n' + pformat(scan_key, indent=10))
-#         radius, xy, eye_time = self.load_eye_traces(scan_key)
-#         frame_times = InputResponse().load_frame_times(scan_key)
-#         behavior_clock = self.load_behavior_timing(scan_key)
-
-#         if len(frame_times) - len(behavior_clock) != 0:
-#             assert abs(len(frame_times) - len(behavior_clock)) < 2, 'Difference bigger than 2 time points'
-#             l = min(len(frame_times), len(behavior_clock))
-#             log.info('Frametimes and stimulus.BehaviorSync differ in length! Shortening it.', depth=1)
-#             frame_times = frame_times[:l]
-#             behavior_clock = behavior_clock[:l]
-
-#         fr2beh = NaNSpline(frame_times, behavior_clock, k=1, ext=3)
-#         sampling_period = float((Preprocessing() & scan_key).proj(period='1/behavior_lowpass').fetch1('period')) \TODO: Fix precision
-#         log.info('Downsampling eye signal to {}Hz'.format(1 / sampling_period))
-#         deye = np.nanmedian(np.diff(eye_time))
-#         h_eye = self.get_filter(sampling_period, deye, 'hamming', warning=True)
-#         h_deye = self.get_filter(sampling_period, deye, 'dhamming', warning=True)
-#         pupil_spline = NaNSpline(eye_time,
-#                                  np.convolve(radius, h_eye, mode='same'), k=1, ext=0)
-
-#         dpupil_spline = NaNSpline(eye_time,
-#                                   np.convolve(radius, h_deye, mode='same'), k=1, ext=0)
-#         center_spline = SplineCurve(eye_time,
-#                                     np.vstack([np.convolve(coord, h_eye, mode='same') for coord in xy]),
-#                                     k=1, ext=0)
-
-#         flip_times, sample_times, trial_keys = \
-#             (InputResponse.Input() * MovieClips() * stimulus.Trial() & scan_key).fetch('flip_times', 'sample_times',
-#                                                                                        dj.key)
-#         flip_times = [ft.squeeze() for ft in flip_times]
-#         for trial_key, flips, samps in tqdm(zip(trial_keys, flip_times, sample_times),
-#                                             total=len(trial_keys), desc='Trial '):
-#             t = fr2beh(flips[0] + samps)
-#             pupil_trace = pupil_spline(t)
-#             dpupil = dpupil_spline(t)
-#             center = center_spline(t)
-#             nans = np.array([np.isnan(e).sum() for e in [pupil_trace, dpupil, center]])
-#             if np.any(nans > 0):
-#                 log.info('Found {} NaNs in one of the traces. Skipping trial {}'.format(np.max(nans),
-#                                                                                         pformat(trial_key, indent=5),
-#                                                                                         ))
-#             else:
-#                 self.insert1(dict(scan_key, **trial_key,
-#                                   pupil=pupil_trace,
-#                                   dpupil=dpupil,
-#                                   center=center),
-#                              ignore_extra_fields=True)
+        flip_times, sample_times, trial_keys = (InputResponse.Input() * MovieClips() * stimulus.Trial() & scan_key).fetch(
+            'flip_times', 'sample_times', dj.key)
+        flip_times = [ft.squeeze() for ft in flip_times]
+        for trial_key, flips, samps in tqdm(zip(trial_keys, flip_times, sample_times),
+                                            total=len(trial_keys), desc='Trial '):
+            t = fr2beh(flips[0] + samps)
+            pupil_trace = pupil_spline(t)
+            dpupil = dpupil_spline(t)
+            center = center_spline(t)
+            nans = np.array([np.isnan(e).sum() for e in [pupil_trace, dpupil, center]])
+            if np.any(nans > 0):
+                log.info('Found {} NaNs in one of the traces. Skipping trial {}'.format(
+                    np.max(nans), pformat(trial_key, indent=5)))
+            else:
+                self.insert1(dict(scan_key, **trial_key,
+                                  pupil=pupil_trace,
+                                  dpupil=dpupil,
+                                  center=center),
+                             ignore_extra_fields=True)
 
 
-# @schema
-# class Eye2(dj.Computed, FilterMixin, BehaviorMixin):
-#     definition = """
-#     # eye movement data
+@schema
+class Eye2(dj.Computed, FilterMixin, BehaviorMixin):
+    definition = """
+    # eye movement data
 
-#     -> InputResponse.Input
-#     -> pupil.FittedContour
-#     ---
-#     pupil              : external-data   # pupil dilation trace
-#     dpupil             : external-data   # derivative of pupil dilation trace
-#     center             : external-data   # center position of the eye
-#     """
+    -> InputResponse.Input
+    -> pupil.FittedContour
+    ---
+    pupil              : external-data   # pupil dilation trace
+    dpupil             : external-data   # derivative of pupil dilation trace
+    center             : external-data   # center position of the eye
+    """
 
-#     @property
-#     def key_source(self):
-#         return InputResponse & pupil.FittedContour & stimulus.BehaviorSync
+    @property
+    def key_source(self):
+        return InputResponse & pupil.FittedContour & stimulus.BehaviorSync
 
-#     def _make_tuples(self, scan_key):
-#         log.info('Populating\n' + pformat(scan_key, indent=10))
-#         radius, xy, eye_time = self.load_eye_traces_old(scan_key)
-#         frame_times = InputResponse().load_frame_times(scan_key)
-#         behavior_clock = self.load_behavior_timing(scan_key)
+    def _make_tuples(self, scan_key):
+        log.info('Populating\n' + pformat(scan_key, indent=10))
+        radius, xy, eye_time = self.load_eye_traces_old(scan_key)
+        frame_times = InputResponse().load_frame_times(scan_key)
+        behavior_clock = self.load_behavior_timing(scan_key)
 
-#         if len(frame_times) - len(behavior_clock) != 0:
-#             assert abs(len(frame_times) - len(behavior_clock)) < 2, 'Difference bigger than 2 time points'
-#             l = min(len(frame_times), len(behavior_clock))
-#             log.info('Frametimes and stimulus.BehaviorSync differ in length! Shortening it.', depth=1)
-#             frame_times = frame_times[:l]
-#             behavior_clock = behavior_clock[:l]
+        if len(frame_times) - len(behavior_clock) != 0:
+            assert abs(len(frame_times) - len(behavior_clock)) < 2, 'Difference bigger than 2 time points'
+            l = min(len(frame_times), len(behavior_clock))
+            log.info('Frametimes and stimulus.BehaviorSync differ in length! Shortening it.', depth=1)
+            frame_times = frame_times[:l]
+            behavior_clock = behavior_clock[:l]
 
-#         fr2beh = NaNSpline(frame_times, behavior_clock, k=1, ext=3)
-#         sampling_period = float((Preprocessing() & scan_key).proj(period='1/behavior_lowpass').fetch1('period')) \TODO: Fix precision
-#         log.info('Downsampling eye signal to {}Hz'.format(1 / sampling_period))
-#         deye = np.nanmedian(np.diff(eye_time))
-#         h_eye = self.get_filter(sampling_period, deye, 'hamming', warning=True)
-#         h_deye = self.get_filter(sampling_period, deye, 'dhamming', warning=True)
-#         pupil_spline = NaNSpline(eye_time,
-#                                  np.convolve(radius, h_eye, mode='same'), k=1, ext=0)
+        fr2beh = NaNSpline(frame_times, behavior_clock, k=1, ext=3)
+        sampling_period = 1 / float((Preprocessing & key).fetch1('behavior_lowpass'))
+        log.info('Downsampling eye signal to {}Hz'.format(1 / sampling_period))
+        deye = np.nanmedian(np.diff(eye_time))
+        h_eye = self.get_filter(sampling_period, deye, 'hamming', warning=True)
+        h_deye = self.get_filter(sampling_period, deye, 'dhamming', warning=True)
+        pupil_spline = NaNSpline(
+            eye_time, np.convolve(radius, h_eye, mode='same'), k=1, ext=0)
+        dpupil_spline = NaNSpline(
+            eye_time, np.convolve(radius, h_deye, mode='same'), k=1, ext=0)
+        center_spline = SplineCurve(
+            eye_time, np.vstack([np.convolve(coord, h_eye, mode='same') for coord in xy]), k=1, ext=0)
 
-#         dpupil_spline = NaNSpline(eye_time,
-#                                   np.convolve(radius, h_deye, mode='same'), k=1, ext=0)
-#         center_spline = SplineCurve(eye_time,
-#                                     np.vstack([np.convolve(coord, h_eye, mode='same') for coord in xy]),
-#                                     k=1, ext=0)
-
-#         flip_times, sample_times, trial_keys = \
-#             (InputResponse.Input() * MovieClips() * stimulus.Trial() & scan_key).fetch('flip_times', 'sample_times',
-#                                                                                        dj.key)
-#         flip_times = [ft.squeeze() for ft in flip_times]
-#         for trial_key, flips, samps in tqdm(zip(trial_keys, flip_times, sample_times),
-#                                             total=len(trial_keys), desc='Trial '):
-#             t = fr2beh(flips[0] + samps)
-#             pupil = pupil_spline(t)
-#             dpupil = dpupil_spline(t)
-#             center = center_spline(t)
-#             nans = np.array([np.isnan(e).sum() for e in [pupil, dpupil, center]])
-#             if np.any(nans > 0):
-#                 log.info('Found {} NaNs in one of the traces. Skipping trial {}'.format(np.max(nans),
-#                                                                                         pformat(trial_key, indent=5),
-#                                                                                         ))
-#             else:
-#                 self.insert1(dict(scan_key, **trial_key,
-#                                   pupil=pupil,
-#                                   dpupil=dpupil,
-#                                   center=center),
-#                              ignore_extra_fields=True)
+        flip_times, sample_times, trial_keys = (InputResponse.Input() * MovieClips() * stimulus.Trial() & scan_key).fetch(
+            'flip_times', 'sample_times', dj.key)
+        flip_times = [ft.squeeze() for ft in flip_times]
+        for trial_key, flips, samps in tqdm(zip(trial_keys, flip_times, sample_times),
+                                            total=len(trial_keys), desc='Trial '):
+            t = fr2beh(flips[0] + samps)
+            pupil = pupil_spline(t)
+            dpupil = dpupil_spline(t)
+            center = center_spline(t)
+            nans = np.array([np.isnan(e).sum() for e in [pupil, dpupil, center]])
+            if np.any(nans > 0):
+                log.info('Found {} NaNs in one of the traces. Skipping trial {}'.format(
+                    np.max(nans), pformat(trial_key, indent=5)))
+            else:
+                self.insert1(dict(scan_key, **trial_key,
+                                  pupil=pupil,
+                                  dpupil=dpupil,
+                                  center=center),
+                             ignore_extra_fields=True)
 
 
 # @schema
