@@ -305,84 +305,82 @@ class MovieClips(dj.Computed, FilterMixin):
 
 # @h5cached('/external/cache/', mode='groups', transfer_to_tmp=False,
 #           file_format='movies{animal_id}-{session}-{scan_idx}-pre{preproc_id}-pipe{pipe_version}-seg{segmentation_method}-spike{spike_method}.h5')
-# @schema
-# class InputResponse(dj.Computed, FilterMixin, TraceMixin):
-#     definition = """
-#     # responses of one neuron to the stimulus
+@schema
+class InputResponse(dj.Computed, FilterMixin, TraceMixin):
+    definition = """
+    # responses of one neuron to the stimulus
 
-#     -> MovieScan
-#     -> Preprocessing
-#     ---
-#     """
+    -> MovieScan
+    -> Preprocessing
+    ---
+    """
 
-#     key_source = MovieScan() * Preprocessing() & MovieClips()
+    key_source = MovieScan() * Preprocessing() & MovieClips()
 
-#     class Input(dj.Part):
-#         definition = """
-#             -> master
-#             -> stimulus.Trial
-#             -> MovieClips
-#             ---
-#             """
+    class Input(dj.Part):
+        definition = """
+            -> master
+            -> stimulus.Trial
+            -> MovieClips
+            ---
+            """
 
-#     class ResponseBlock(dj.Part):
-#         definition = """
-#             -> master
-#             -> master.Input
-#             ---
-#             responses           : external-data   # reponse of one neurons for all bins
-#             """
+    class ResponseBlock(dj.Part):
+        definition = """
+            -> master
+            -> master.Input
+            ---
+            responses           : blob@external # reponse of one neurons for all bins
+            """
 
-#     class ResponseKeys(dj.Part):
-#         definition = """
-#             -> master.ResponseBlock
-#             -> fuse.Activity.Trace
-#             row_id           : int             # row id in the response block
-#             ---
-#             """
+    class ResponseKeys(dj.Part):
+        definition = """
+            -> master.ResponseBlock
+            -> fuse.Activity.Trace
+            row_id           : int             # row id in the response block
+            ---
+            """
 
-#     def get_trace_spline(self, key, sampling_period):
-#         traces, frame_times, trace_keys = self.load_traces_and_frametimes(key)
-#         log.info('Loaded {} traces'.format(len(traces)))
+    def get_trace_spline(self, key, sampling_period):
+        traces, frame_times, trace_keys = self.load_traces_and_frametimes(key)
+        log.info('Loaded {} traces'.format(len(traces)))
 
-#         log.info('Generating lowpass filters with cutoff {:.3f}Hz'.format(1 / sampling_period))
-#         h_trace = self.get_filter(sampling_period, np.median(np.diff(frame_times)), 'hamming',
-#                                   warning=False)
-#         # low pass filter
-#         trace_spline = SplineCurve(frame_times,
-#                                    [np.convolve(trace, h_trace, mode='same') for trace in traces], k=1, ext=1)
-#         return trace_spline, trace_keys, frame_times.min(), frame_times.max()
+        log.info('Generating lowpass filters with cutoff {:.3f}Hz'.format(1 / sampling_period))
+        h_trace = self.get_filter(sampling_period, np.median(np.diff(frame_times)), 'hamming', warning=False)
+        # low pass filter
+        trace_spline = SplineCurve(
+            frame_times, [np.convolve(trace, h_trace, mode='same') for trace in traces], k=1, ext=1)
+        return trace_spline, trace_keys, frame_times.min(), frame_times.max()
 
-#     def make(self, scan_key):
-#         log.info(80 * '-')
-#         log.info('Populating {}'.format(repr(scan_key)).ljust(80, '-'))
-#         self.insert1(scan_key)
-#         # integration window size for responses
-#         sampling_period = 1 / float((Preprocessing & scan_key).fetch1('resampl_freq'))
+    def make(self, scan_key):
+        log.info(80 * '-')
+        log.info('Populating {}'.format(repr(scan_key)).ljust(80, '-'))
+        self.insert1(scan_key)
+        # integration window size for responses
+        sampling_period = 1 / float((Preprocessing & scan_key).fetch1('resampl_freq'))
 
-#         log.info('Sampling neural responses at {}s intervals'.format(sampling_period))
+        log.info('Sampling neural responses at {}s intervals'.format(sampling_period))
 
-#         trace_spline, trace_keys, ftmin, ftmax = self.get_trace_spline(scan_key, sampling_period)
+        trace_spline, trace_keys, ftmin, ftmax = self.get_trace_spline(scan_key, sampling_period)
 
-#         flip_times, sample_times, fps0, trial_keys = \
-#             (MovieScan() * MovieClips() * stimulus.Trial() & scan_key).fetch('flip_times', 'sample_times', 'fps0',
-#                                                                              dj.key)
-#         flip_times = [ft.squeeze() for ft in flip_times]
-#         nodrop = np.array([np.diff(ft).max() < 1.99 / frame_rate for ft, frame_rate in zip(flip_times, fps0)])
-#         valid = np.array([ft.min() >= ftmin and ft.max() <= ftmax for ft in flip_times], dtype=bool)
-#         if not np.all(nodrop & valid):
-#             log.warning('Dropping {} trials with dropped frames or flips outside the recording interval'.format(
-#                 (~(nodrop & valid)).sum()))
-#         for trial_key, flips, samps, take in tqdm(zip(trial_keys, flip_times, sample_times, nodrop & valid),
-#                                                   total=len(trial_keys), desc='Trial '):
-#             if take:
-#                 self.Input().insert1(dict(scan_key, **trial_key),
-#                                      ignore_extra_fields=True, skip_duplicates=True)
-#                 self.ResponseBlock().insert1(dict(trial_key, responses=trace_spline(flips[0] + samps)),
-#                                              ignore_extra_fields=True)
-#                 self.ResponseKeys().insert(
-#                     [dict(trial_key, row_id=i, **k) for i, k in enumerate(trace_keys)], ignore_extra_fields=True
-#                 )
+        flip_times, sample_times, fps0, trial_keys = (MovieScan() * MovieClips() * stimulus.Trial() & scan_key).fetch(
+            'flip_times', 'sample_times', 'fps0', dj.key)
+        flip_times = [ft.squeeze() for ft in flip_times]
+        nodrop = np.array([np.diff(ft).max() < 1.99 / frame_rate for ft, frame_rate in zip(flip_times, fps0)])
+        valid = np.array([ft.min() >= ftmin and ft.max() <= ftmax for ft in flip_times], dtype=bool)
+        if not np.all(nodrop & valid):
+            log.warning('Dropping {} trials with dropped frames or flips outside the recording interval'.format(
+                (~(nodrop & valid)).sum()))
+        for trial_key, flips, samps, take in tqdm(zip(trial_keys, flip_times, sample_times, nodrop & valid),
+                                                  total=len(trial_keys), desc='Trial '):
+            if take:
+                self.Input().insert1(dict(scan_key, **trial_key),
+                                     ignore_extra_fields=True, skip_duplicates=True)
+                self.ResponseBlock().insert1(dict(trial_key, responses=trace_spline(flips[0] + samps)),
+                                             ignore_extra_fields=True)
+                self.ResponseKeys().insert(
+                    [dict(trial_key, row_id=i, **k) for i, k in enumerate(trace_keys)], ignore_extra_fields=True
+                )
 
 #     def compute_data(self, key):
 #         key = dict((self & key).fetch1(dj.key), **key)
