@@ -18,9 +18,9 @@ from ..utils.data import SplineMovie, FilterMixin, SplineCurve, NaNSpline, fill_
 
 
 dj.config['stores'] = {
-    'external': dict(
+    'scratch09': dict(
         protocol='file',
-        location='/mnt/scratch09/movie-data-v12/')
+        location='/mnt/scratch09/djexternal/')
 }
 
 
@@ -39,7 +39,7 @@ UNIQUE_CLIP = {
     'stimulus.Matisse2': ('condition_hash',)
 }
 
-schema = dj.schema('neurodata_movies_v12', locals())
+schema = dj.schema('neuro_data_movies', locals())
 
 MOVIESCANS = [  # '(animal_id=16278 and session=11 and scan_idx between 5 and 9)',  # hollymonet
     # '(animal_id=15685 and session=2 and scan_idx between 11 and 15)',  # hollymonet
@@ -218,8 +218,8 @@ class MovieClips(dj.Computed, FilterMixin):
     -> Preprocessing
     ---
     fps0                 : float                # original framerate
-    frames               : blob@external        # input movie downsampled
-    sample_times         : blob@external        # sample times for the new frames
+    frames               : blob@scratch09       # input movie downsampled
+    sample_times         : blob@scratch09       # sample times for the new frames
     duration             : float                # duration in seconds
     """
 
@@ -329,14 +329,14 @@ class InputResponse(dj.Computed, FilterMixin, TraceMixin):
             -> master
             -> master.Input
             ---
-            responses           : blob@external # reponse of one neurons for all bins
+            responses           : blob@scratch09    # reponse of one neurons for all bins
             """
 
     class ResponseKeys(dj.Part):
         definition = """
             -> master.ResponseBlock
             -> fuse.Activity.Trace
-            row_id           : int             # row id in the response block
+            row_id           : int  # row id in the response block
             ---
             """
 
@@ -538,9 +538,9 @@ class Eye(dj.Computed, FilterMixin, BehaviorMixin):
     -> InputResponse.Input
     ---
     -> pupil.FittedPupil
-    pupil              : blob@external   # pupil dilation trace
-    dpupil             : blob@external   # derivative of pupil dilation trace
-    center             : blob@external   # center position of the eye
+    pupil              : blob@scratch09 # pupil dilation trace
+    dpupil             : blob@scratch09 # derivative of pupil dilation trace
+    center             : blob@scratch09 # center position of the eye
     """
 
     @property
@@ -605,9 +605,9 @@ class Eye2(dj.Computed, FilterMixin, BehaviorMixin):
     -> InputResponse.Input
     -> pupil.FittedContour
     ---
-    pupil              : blob@external   # pupil dilation trace
-    dpupil             : blob@external   # derivative of pupil dilation trace
-    center             : blob@external   # center position of the eye
+    pupil              : blob@scratch09 # pupil dilation trace
+    dpupil             : blob@scratch09 # derivative of pupil dilation trace
+    center             : blob@scratch09 # center position of the eye
     """
 
     @property
@@ -669,7 +669,7 @@ class Treadmill(dj.Computed, FilterMixin, BehaviorMixin):
     -> InputResponse.Input
     -> treadmill.Treadmill
     ---
-    treadmill          : blob@external   # treadmill speed (|velcolity|)
+    treadmill          : blob@scratch09 # treadmill speed (|velcolity|)
     """
 
     @property
