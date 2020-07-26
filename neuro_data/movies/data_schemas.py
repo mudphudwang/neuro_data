@@ -605,9 +605,9 @@ class Eye2(dj.Computed, FilterMixin, BehaviorMixin):
     -> InputResponse.Input
     -> pupil.FittedContour
     ---
-    pupil              : external-data   # pupil dilation trace
-    dpupil             : external-data   # derivative of pupil dilation trace
-    center             : external-data   # center position of the eye
+    pupil              : blob@external   # pupil dilation trace
+    dpupil             : blob@external   # derivative of pupil dilation trace
+    center             : blob@external   # center position of the eye
     """
 
     @property
