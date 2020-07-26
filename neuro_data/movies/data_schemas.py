@@ -661,58 +661,55 @@ class Eye2(dj.Computed, FilterMixin, BehaviorMixin):
                              ignore_extra_fields=True)
 
 
-# @schema
-# class Treadmill(dj.Computed, FilterMixin, BehaviorMixin):
-#     definition = """
-#     # eye movement data
+@schema
+class Treadmill(dj.Computed, FilterMixin, BehaviorMixin):
+    definition = """
+    # eye movement data
 
-#     -> InputResponse.Input
-#     -> treadmill.Treadmill
-#     ---
-#     treadmill          : external-data   # treadmill speed (|velcolity|)
-#     """
+    -> InputResponse.Input
+    -> treadmill.Treadmill
+    ---
+    treadmill          : blob@external   # treadmill speed (|velcolity|)
+    """
 
-#     @property
-#     def key_source(self):
-#         rel = InputResponse
-#         return rel & treadmill.Treadmill() & stimulus.BehaviorSync()
+    @property
+    def key_source(self):
+        rel = InputResponse
+        return rel & treadmill.Treadmill() & stimulus.BehaviorSync()
 
-#     def _make_tuples(self, scan_key):
-#         print('Populating', pformat(scan_key))
-#         v, treadmill_time = self.load_treadmill_velocity(scan_key)
-#         frame_times = InputResponse().load_frame_times(scan_key)
-#         behavior_clock = self.load_behavior_timing(scan_key)
+    def make(self, scan_key):
+        print('Populating', pformat(scan_key))
+        v, treadmill_time = self.load_treadmill_velocity(scan_key)
+        frame_times = InputResponse().load_frame_times(scan_key)
+        behavior_clock = self.load_behavior_timing(scan_key)
 
-#         if len(frame_times) - len(behavior_clock) != 0:
-#             assert abs(len(frame_times) - len(behavior_clock)) < 2, 'Difference bigger than 2 time points'
-#             l = min(len(frame_times), len(behavior_clock))
-#             log.info('Frametimes and stimulus.BehaviorSync differ in length! Shortening it.')
-#             frame_times = frame_times[:l]
-#             behavior_clock = behavior_clock[:l]
+        if len(frame_times) - len(behavior_clock) != 0:
+            assert abs(len(frame_times) - len(behavior_clock)) < 2, 'Difference bigger than 2 time points'
+            l = min(len(frame_times), len(behavior_clock))
+            log.info('Frametimes and stimulus.BehaviorSync differ in length! Shortening it.')
+            frame_times = frame_times[:l]
+            behavior_clock = behavior_clock[:l]
 
-#         fr2beh = NaNSpline(frame_times, behavior_clock, k=1, ext=3)
-#         sampling_period = float((Preprocessing() & scan_key).proj(period='1/behavior_lowpass').fetch1('period')) \ TODO: Fix Precision
-#         log.info('Downsampling treadmill signal to {}Hz'.format(1 / sampling_period))
+        fr2beh = NaNSpline(frame_times, behavior_clock, k=1, ext=3)
+        sampling_period = 1 / float((Preprocessing & scan_key).fetch1('behavior_lowpass'))
+        log.info('Downsampling treadmill signal to {}Hz'.format(1 / sampling_period))
 
-#         h_tread = self.get_filter(sampling_period, np.nanmedian(np.diff(treadmill_time)), 'hamming', warning=True)
-#         treadmill_spline = NaNSpline(treadmill_time, np.abs(np.convolve(v, h_tread, mode='same')), k=1, ext=0)
+        h_tread = self.get_filter(sampling_period, np.nanmedian(np.diff(treadmill_time)), 'hamming', warning=True)
+        treadmill_spline = NaNSpline(treadmill_time, np.abs(np.convolve(v, h_tread, mode='same')), k=1, ext=0)
 
-#         flip_times, sample_times, trial_keys = \
-#             (InputResponse.Input() * MovieClips() * stimulus.Trial() & scan_key).fetch('flip_times', 'sample_times',
-#                                                                                        dj.key)
-#         flip_times = [ft.squeeze() for ft in flip_times]
-#         for trial_key, flips, samps in tqdm(zip(trial_keys, flip_times, sample_times),
-#                                             total=len(trial_keys), desc='Trial '):
-#             tm = treadmill_spline(fr2beh(flips[0] + samps))
-#             nans = np.isnan(tm)
-#             if np.any(nans):
-#                 log.info('Found {} NaNs in one of the traces. Skipping trial {}'.format(nans.sum(),
-#                                                                                         pformat(trial_key, indent=5),
-#                                                                                         ))
-
-#             else:
-#                 self.insert1(dict(scan_key, **trial_key, treadmill=tm),
-#                              ignore_extra_fields=True)
+        flip_times, sample_times, trial_keys = (InputResponse.Input() * MovieClips() * stimulus.Trial() & scan_key).fetch(
+            'flip_times', 'sample_times', dj.key)
+        flip_times = [ft.squeeze() for ft in flip_times]
+        for trial_key, flips, samps in tqdm(zip(trial_keys, flip_times, sample_times),
+                                            total=len(trial_keys), desc='Trial '):
+            tm = treadmill_spline(fr2beh(flips[0] + samps))
+            nans = np.isnan(tm)
+            if np.any(nans):
+                log.info('Found {} NaNs in one of the traces. Skipping trial {}'.format(
+                    nans.sum(), pformat(trial_key, indent=5)))
+            else:
+                self.insert1(dict(scan_key, **trial_key, treadmill=tm),
+                             ignore_extra_fields=True)
 
 # import hashlib
 # def key_hash(key):
