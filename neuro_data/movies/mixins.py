@@ -58,7 +58,7 @@ class BehaviorMixin:
         detectedFrames = ~np.isnan(r)
         xy = np.full((len(r), 2), np.nan)
         xy[detectedFrames, :] = np.vstack(center[detectedFrames])
-        xy = np.vstack(map(partial(fill_nans, preserve_gap=3), xy.T))
+        xy = np.vstack(list(map(partial(fill_nans, preserve_gap=3), xy.T)))
         if np.any(np.isnan(xy)):
             log.info('Keeping some nans in the pupil location trace')
         pupil_radius = fill_nans(r.squeeze(), preserve_gap=3)
@@ -74,7 +74,7 @@ class BehaviorMixin:
         detectedFrames = ~np.isnan(r)
         xy = np.full((len(r), 2), np.nan)
         xy[detectedFrames, :] = np.vstack(center[detectedFrames])
-        xy = np.vstack(map(partial(fill_nans, preserve_gap=3), xy.T))
+        xy = np.vstack(list(map(partial(fill_nans, preserve_gap=3), xy.T)))
         if np.any(np.isnan(xy)):
             log.info('Keeping some nans in the pupil location trace')
         pupil_radius = fill_nans(r.squeeze(), preserve_gap=3)
