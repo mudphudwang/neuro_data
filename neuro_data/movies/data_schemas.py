@@ -360,10 +360,11 @@ class InputResponse(dj.Computed, FilterMixin, TraceMixin):
         sampling_period = 1 / float((Preprocessing & scan_key).fetch1('resampl_freq'))
 
         log.info('Sampling neural responses at {}s intervals'.format(sampling_period))
-
         trace_spline, trace_keys, ftmin, ftmax = self.get_trace_spline(scan_key, sampling_period)
 
+        assert ConditionTier & scan_key, 'ConditionTier has not been populated'
         assert not (MovieClips.key_source & scan_key) - MovieClips, 'There are missing tuples in MovieClips'
+        
         flip_times, sample_times, fps0, trial_keys = (MovieScan() * MovieClips() * stimulus.Trial() & scan_key).fetch(
             'flip_times', 'sample_times', 'fps0', dj.key)
         flip_times = [ft.squeeze() for ft in flip_times]
