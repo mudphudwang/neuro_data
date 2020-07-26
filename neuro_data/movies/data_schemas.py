@@ -564,7 +564,7 @@ class Eye(dj.Computed, FilterMixin, BehaviorMixin):
             behavior_clock = behavior_clock[:l]
 
         fr2beh = NaNSpline(frame_times, behavior_clock, k=1, ext=3)
-        sampling_period = 1 / float((Preprocessing & key).fetch1('behavior_lowpass'))
+        sampling_period = 1 / float((Preprocessing & scan_key).fetch1('behavior_lowpass'))
         log.info('Downsampling eye signal to {}Hz'.format(1 / sampling_period))
         deye = np.nanmedian(np.diff(eye_time))
         h_eye = self.get_filter(sampling_period, deye, 'hamming', warning=True)
@@ -614,7 +614,7 @@ class Eye2(dj.Computed, FilterMixin, BehaviorMixin):
     def key_source(self):
         return InputResponse & pupil.FittedContour & stimulus.BehaviorSync
 
-    def _make_tuples(self, scan_key):
+    def make(self, scan_key):
         log.info('Populating\n' + pformat(scan_key, indent=10))
         radius, xy, eye_time = self.load_eye_traces_old(scan_key)
         frame_times = InputResponse().load_frame_times(scan_key)
@@ -628,7 +628,7 @@ class Eye2(dj.Computed, FilterMixin, BehaviorMixin):
             behavior_clock = behavior_clock[:l]
 
         fr2beh = NaNSpline(frame_times, behavior_clock, k=1, ext=3)
-        sampling_period = 1 / float((Preprocessing & key).fetch1('behavior_lowpass'))
+        sampling_period = 1 / float((Preprocessing & scan_key).fetch1('behavior_lowpass'))
         log.info('Downsampling eye signal to {}Hz'.format(1 / sampling_period))
         deye = np.nanmedian(np.diff(eye_time))
         h_eye = self.get_filter(sampling_period, deye, 'hamming', warning=True)
