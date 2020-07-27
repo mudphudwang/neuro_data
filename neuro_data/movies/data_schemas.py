@@ -725,7 +725,9 @@ class ScanDataset(dj.Computed):
     def make(self, key):
         assert Eye & key or Eye2 & key, 'Eye/Eye2 has not been populated'
         assert Treadmill & key, 'Treadmill has not been populated'
-        fpath = os.path.join('/tmp', key_hash(key))
+        fname = '{animal_id}-{session}-{scan_idx}-{pipe_version}-{segmentation_method}' \
+            '-{spike_method}-{preproc_id}.h5'.format(**key)
+        fpath = os.path.join('/tmp', key_hash(key), fname)
         save_dict_to_hdf5(InputResponse().compute_data(key), fpath)
         self.insert1(dict(h5_dataset=fpath, **key))
 
