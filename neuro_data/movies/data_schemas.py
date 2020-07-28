@@ -22,8 +22,7 @@ from ..utils.data import SplineMovie, FilterMixin, SplineCurve, NaNSpline, \
 dj.config['stores'] = {
     'scratch09': dict(
         protocol='file',
-        location='/mnt/scratch09/djexternal/',
-        stage='/mnt/scratch09/djexternal/')
+        location='/mnt/scratch09/djexternal/')
 }
 
 
@@ -720,14 +719,13 @@ class ScanDataset(dj.Computed):
 
     -> InputResponse
     ---
-    h5_dataset      : filepath@scratch09    # hdf5 dataset
+    h5_dataset      : attach@scratch09  # hdf5 dataset
     """
 
     def make(self, key):
         assert Eye & key or Eye2 & key, 'Eye/Eye2 has not been populated'
         assert Treadmill & key, 'Treadmill has not been populated'
-        fdir = os.path.join(dj.config['stores']['scratch09']['location'],
-                            self.database, self.table_name, key_hash(key))
+        fdir = os.path.join('/tmp', self.database, self.table_name, key_hash(key))
         if not os.path.exists(fdir):
             os.makedirs(fdir)
         fpath = os.path.join(fdir, 'scanset.h5')
