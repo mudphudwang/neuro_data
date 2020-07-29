@@ -344,7 +344,7 @@ class InputResponse(dj.Computed, FilterMixin, TraceMixin):
             ---
             """
 
-    class ResponseBlock(dj.Part):
+    class Response(dj.Part):
         definition = """
             -> master
             -> master.Input
@@ -371,7 +371,7 @@ class InputResponse(dj.Computed, FilterMixin, TraceMixin):
         sampling_period = 1 / float((Preprocessing & scan_key).fetch1('resampl_freq'))
 
         log.info('Sampling neural responses at {}s intervals'.format(sampling_period))
-        trace_spline, trace_keys, ftmin, ftmax = self.get_trace_spline(scan_key, sampling_period)
+        trace_spline, _, ftmin, ftmax = self.get_trace_spline(scan_key, sampling_period)
 
         assert ConditionTier & scan_key, 'ConditionTier has not been populated'
         assert not (MovieClips.key_source & scan_key) - MovieClips, 'There are missing tuples in MovieClips'
@@ -387,13 +387,8 @@ class InputResponse(dj.Computed, FilterMixin, TraceMixin):
         for trial_key, flips, samps, take in tqdm(zip(trial_keys, flip_times, sample_times, nodrop & valid),
                                                   total=len(trial_keys), desc='Trial '):
             if take:
-                self.Input().insert1(dict(scan_key, **trial_key),
-                                     ignore_extra_fields=True, skip_duplicates=True)
-                self.ResponseBlock().insert1(dict(trial_key, responses=trace_spline(flips[0] + samps)),
-                                             ignore_extra_fields=True)
-                self.ResponseKeys().insert(
-                    [dict(trial_key, row_id=i, **k) for i, k in enumerate(trace_keys)], ignore_extra_fields=True
-                )
+                self.Input().insert1(trial_key)
+                self.Response().insert1(dict(responses=trace_spline(flips[0] + samps, **trial_key)))
 
     # def compute_data(self, key):
     #     key = dict((self & key).fetch1(dj.key), **key)
@@ -413,7 +408,7 @@ class InputResponse(dj.Computed, FilterMixin, TraceMixin):
     #         len(pipe.ScanSet.UnitInfo() & key), "AreaMembership decreases number of neurons"
 
     #     data_rel = MovieClips() * ConditionTier() \
-    #         * self.Input() * self.ResponseBlock() * stimulus.Condition().proj('stimulus_type')
+    #         * self.Input() * self.Response() * stimulus.Condition().proj('stimulus_type')
 
     #     if include_behavior:  # restrict trials to those that do not have NaNs in Treadmill or Eye
     #         data_rel = data_rel & EyeTable & Treadmill
@@ -436,7 +431,7 @@ class InputResponse(dj.Computed, FilterMixin, TraceMixin):
 
     #     responses, behavior, eye_position = [], [], []
     #     for stim_key in tqdm(stim_keys):
-    #         response_block = (self.ResponseBlock() & stim_key).fetch1('responses')
+    #         response_block = (self.Response() & stim_key).fetch1('responses')
     #         sessions, animal_ids, unit_ids, scan_idx, layer, area = \
     #             (response & key & stim_key).fetch('session', 'animal_id',
     #                                               'unit_id', 'scan_idx',
