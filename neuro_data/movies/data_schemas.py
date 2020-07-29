@@ -388,7 +388,7 @@ class InputResponse(dj.Computed, FilterMixin, TraceMixin):
                                                   total=len(trial_keys), desc='Trial '):
             if take:
                 self.Input().insert1(trial_key)
-                self.Response().insert1(dict(responses=trace_spline(flips[0] + samps, **trial_key)))
+                self.Response().insert1(dict(responses=trace_spline(flips[0] + samps), **trial_key))
 
     # def compute_data(self, key):
     #     key = dict((self & key).fetch1(dj.key), **key)
