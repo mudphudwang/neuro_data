@@ -390,152 +390,6 @@ class InputResponse(dj.Computed, FilterMixin, TraceMixin):
                 self.Input().insert1(trial_key)
                 self.Response().insert1(dict(responses=trace_spline(flips[0] + samps), **trial_key))
 
-    # def compute_data(self, key):
-    #     key = dict((self & key).fetch1(dj.key), **key)
-    #     log.info('Computing dataset for {}'.format(repr(key)))
-
-    #     # meso or reso?
-    #     pipe = (fuse.ScanDone() * MovieScan() & key).fetch1('pipe')
-    #     pipe = dj.create_virtual_module(pipe, 'pipeline_' + pipe)
-
-    #     # get data relation
-    #     # patch to deal with old eye tracking method
-    #     EyeTable = Eye() if Eye() & key else Eye2()
-    #     include_behavior = bool(EyeTable * Treadmill() & key)
-
-    #     # make sure that including areas does not decreas number of neurons
-    #     assert len(pipe.ScanSet.UnitInfo() * experiment.Layer() * anatomy.AreaMembership() * anatomy.LayerMembership() & key) == \
-    #         len(pipe.ScanSet.UnitInfo() & key), "AreaMembership decreases number of neurons"
-
-    #     data_rel = MovieClips() * ConditionTier() \
-    #         * self.Input() * self.Response() * stimulus.Condition().proj('stimulus_type')
-
-    #     if include_behavior:  # restrict trials to those that do not have NaNs in Treadmill or Eye
-    #         data_rel = data_rel & EyeTable & Treadmill
-
-    #     response = self.ResponseKeys() * (pipe.ScanSet.UnitInfo() * experiment.Layer() * anatomy.AreaMembership()
-    #                                       & key & '(um_z >= z_start) and (um_z < z_end)')
-
-    #     # --- fetch all stimuli and classify into train/test/val
-    #     inputs, hashes, stim_keys, tiers, types, trial_idx, durations = \
-    #         (data_rel & key).fetch('frames', 'condition_hash', dj.key,
-    #                                'tier', 'stimulus_type', 'trial_idx', 'duration',
-    #                                order_by='condition_hash ASC, trial_idx ASC')
-    #     train_idx = np.array([t == 'train' for t in tiers], dtype=bool)
-    #     test_idx = np.array([t == 'test' for t in tiers], dtype=bool)
-    #     val_idx = np.array([t == 'validation' for t in tiers], dtype=bool)
-
-    #     # ----- extract trials
-
-    #     unit_ids_tmp = animal_ids_tmp = sessions_tmp = scan_idx_tmp = layer_tmp = area_tmp = None
-
-    #     responses, behavior, eye_position = [], [], []
-    #     for stim_key in tqdm(stim_keys):
-    #         response_block = (self.Response() & stim_key).fetch1('responses')
-    #         sessions, animal_ids, unit_ids, scan_idx, layer, area = \
-    #             (response & key & stim_key).fetch('session', 'animal_id',
-    #                                               'unit_id', 'scan_idx',
-    #                                               "layer", "brain_area",
-    #                                               order_by='row_id ASC')
-    #         if include_behavior:
-    #             pupil, dpupil, treadmill, center = (EyeTable * Treadmill() & key
-    #                                                 & stim_key).fetch1('pupil', 'dpupil', 'treadmill', 'center')
-
-    #             behavior.append(np.vstack([pupil, dpupil, treadmill]).T)
-    #             eye_position.append(center.T)
-
-    #         assert area_tmp is None or np.all(area_tmp == area), 'areas do not match'
-    #         assert layer_tmp is None or np.all(layer_tmp == layer), 'layers do not match'
-    #         assert unit_ids_tmp is None or np.all(unit_ids_tmp == unit_ids), 'unit ids do not match'
-    #         assert animal_ids_tmp is None or np.all(animal_ids_tmp == animal_ids), 'animal ids do not match'
-    #         assert sessions_tmp is None or np.all(sessions_tmp == sessions), 'sessions do not match'
-    #         assert scan_idx_tmp is None or np.all(scan_idx_tmp == scan_idx), 'scan_idx do not match'
-    #         unit_ids_tmp, animal_ids_tmp, sessions_tmp, scan_idx_tmp, layer_tmp = \
-    #             unit_ids, animal_ids, sessions, scan_idx, layer
-    #         responses.append(response_block.T.astype(np.float32))
-    #     assert len(np.unique(unit_ids)) == len(unit_ids), \
-    #         'unit ids are not unique, do you have more than one preprocessing method?'
-
-    #     neurons = dict(
-    #         unit_ids=unit_ids.astype(np.uint16),
-    #         animal_ids=animal_ids.astype(np.uint16),
-    #         sessions=sessions.astype(np.uint8),
-    #         scan_idx=scan_idx.astype(np.uint8),
-    #         layer=layer.astype('S'),
-    #         area=area.astype('S')
-    #     )
-
-    #     # insert channel dimension
-    #     for i, inp in enumerate(inputs):
-    #         if len(inp.shape) == 3:
-    #             inputs[i] = inp[None, ...]
-
-    #     hashes = hashes.astype(str)
-    #     types = types.astype(str)
-
-    #     def run_stats(selector, types, ix, axis=None):
-    #         ret = {}
-    #         for t in np.unique(types):
-    #             train_responses = selector(ix & (types == t))
-    #             ret[t] = dict(
-    #                 mean=train_responses.mean(axis=axis).astype(np.float32),
-    #                 std=train_responses.std(axis=axis, ddof=1).astype(np.float32),
-    #                 min=train_responses.min(axis=axis).astype(np.float32),
-    #                 max=train_responses.max(axis=axis).astype(np.float32),
-    #                 median=np.median(train_responses, axis=axis).astype(np.float32)
-    #             )
-    #         train_responses = selector(ix)
-    #         ret['all'] = dict(
-    #             mean=train_responses.mean(axis=axis).astype(np.float32),
-    #             std=train_responses.std(axis=axis, ddof=1).astype(np.float32),
-    #             min=train_responses.min(axis=axis).astype(np.float32),
-    #             max=train_responses.max(axis=axis).astype(np.float32),
-    #             median=np.median(train_responses, axis=axis).astype(np.float32)
-    #         )
-    #         return ret
-
-    #     # --- compute statistics
-    #     log.info('Computing statistics on training dataset')
-    #     def response_selector(ix): return np.concatenate([r for take, r in zip(ix, responses) if take], axis=0)
-    #     response_statistics = run_stats(response_selector, types, train_idx, axis=0)
-
-    #     def input_selector(ix): return np.hstack([r.ravel() for take, r in zip(ix, inputs) if take])
-    #     input_statistics = run_stats(input_selector, types, train_idx)
-
-    #     statistics = dict(
-    #         inputs=input_statistics,
-    #         responses=response_statistics
-    #     )
-
-    #     if include_behavior:
-    #         # ---- include statistics
-    #         def behavior_selector(ix): return np.concatenate([r for take, r in zip(ix, behavior) if take], axis=0)
-    #         behavior_statistics = run_stats(behavior_selector, types, train_idx, axis=0)
-
-    #         def eye_selector(ix): return np.concatenate([r for take, r in zip(ix, eye_position) if take], axis=0)
-    #         eye_statistics = run_stats(eye_selector, types, train_idx, axis=0)
-
-    #         statistics['behavior'] = behavior_statistics
-    #         statistics['eye_position'] = eye_statistics
-
-    #     retval = dict(inputs=inputs,
-    #                   responses=responses,
-    #                   types=types.astype('S'),
-    #                   train_idx=train_idx,
-    #                   val_idx=val_idx,
-    #                   test_idx=test_idx,
-    #                   condition_hashes=hashes.astype('S'),
-    #                   durations=durations.astype(np.float32),
-    #                   trial_idx=trial_idx.astype(np.uint32),
-    #                   neurons=neurons,
-    #                   tiers=tiers.astype('S'),
-    #                   statistics=statistics
-    #                   )
-    #     if include_behavior:
-    #         retval['behavior'] = behavior
-    #         retval['eye_position'] = eye_position
-    #     return retval
-
 
 @schema
 class Eye(dj.Computed, FilterMixin, BehaviorMixin):
@@ -736,8 +590,139 @@ class ScanDataset(dj.Computed):
         if not os.path.exists(fdir):
             os.makedirs(fdir)
         fpath = os.path.join(fdir, 'scanset.h5')
-        save_dict_to_hdf5(InputResponse().compute_data(key), fpath)
+        save_dict_to_hdf5(self.compute_data(key), fpath)
         self.insert1(dict(h5_dataset=fpath, **key))
+
+    def neurons(self, key=None):
+        key = self.fetch1(key) if key is None else (InputResponse & key).fetch1(dj.key)
+        animal_ids, sessions, scan_idx, pipe_versions, segmentation_methods, spike_methods, unit_ids = \
+            (ResponseKeys.Unit & key).fetch('animal_id', 'session', 'scan_idx', 'pipe_version',
+                                            'segmentation_method', 'spike_method', 'unit_id', order_by='row_id')
+        neurons = dict(
+            animal_ids=animal_ids.astype(np.uint16),
+            sessions=sessions.astype(np.uint8),
+            scan_idx=scan_idx.astype(np.uint8),
+            pipe_versions=pipe_versions.astype(np.uint8),
+            segmentation_methods=segmentation_methods.astype(np.uint8),
+            spike_methods=spike_methods.astype(np.uint8),
+            unit_ids=unit_ids.astype(np.uint16)
+        )
+        return neurons
+
+    def eye_table(self, key=None):
+        # patch to deal with old eye tracking method
+        key = self.fetch1(key) if key is None else (InputResponse & key).fetch1(dj.key)
+        return Eye if Eye & key else Eye2
+
+    def compute_data(self, key=None):
+        key = self.fetch1(key) if key is None else (InputResponse & key).fetch1(dj.key)
+        log.info('Computing dataset for {}'.format(repr(key)))
+
+        # get neurons
+        neurons = self.neurons(key)
+        assert len(np.unique(neurons['unit_ids'])) == len(neurons['unit_ids']), \
+            'unit ids are not unique, do you have more than one preprocessing method?'
+
+        # get data relation
+        data_rel = InputResponse.Input * InputResponse.Response * stimulus.Condition.proj('stimulus_type') \
+            * MovieClips * ConditionTier & key
+        EyeTable = self.eye_table(key)
+        include_behavior = bool(EyeTable * Treadmill & key)
+        if include_behavior:
+            # restrict trials to those that do not have NaNs in Treadmill or Eye
+            data_rel = data_rel & EyeTable & Treadmill
+
+        # --- fetch all stimuli and classify into train/test/val
+        inputs, hashes, stim_keys, tiers, types, trial_idx, durations = data_rel.fetch(
+            'frames', 'condition_hash', dj.key, 'tier', 'stimulus_type', 'trial_idx', 'duration',
+            order_by='condition_hash ASC, trial_idx ASC')
+        train_idx = np.array([t == 'train' for t in tiers], dtype=bool)
+        test_idx = np.array([t == 'test' for t in tiers], dtype=bool)
+        val_idx = np.array([t == 'validation' for t in tiers], dtype=bool)
+
+        # ----- extract trials
+
+        responses, behavior, eye_position = [], [], []
+        for stim_key in tqdm(stim_keys):
+            response_block = (InputResponse.Response & stim_key).fetch1('responses')
+            responses.append(response_block.T.astype(np.float32))
+            if include_behavior:
+                pupil, dpupil, treadmill, center = (EyeTable * Treadmill() & key
+                                                    & stim_key).fetch1('pupil', 'dpupil', 'treadmill', 'center')
+
+                behavior.append(np.vstack([pupil, dpupil, treadmill]).T)
+                eye_position.append(center.T)
+
+        # insert channel dimension
+        for i, inp in enumerate(inputs):
+            if len(inp.shape) == 3:
+                inputs[i] = inp[None, ...]
+
+        hashes = hashes.astype(str)
+        types = types.astype(str)
+
+        def run_stats(selector, types, ix, axis=None):
+            ret = {}
+            for t in np.unique(types):
+                train_responses = selector(ix & (types == t))
+                ret[t] = dict(
+                    mean=train_responses.mean(axis=axis).astype(np.float32),
+                    std=train_responses.std(axis=axis, ddof=1).astype(np.float32),
+                    min=train_responses.min(axis=axis).astype(np.float32),
+                    max=train_responses.max(axis=axis).astype(np.float32),
+                    median=np.median(train_responses, axis=axis).astype(np.float32)
+                )
+            train_responses = selector(ix)
+            ret['all'] = dict(
+                mean=train_responses.mean(axis=axis).astype(np.float32),
+                std=train_responses.std(axis=axis, ddof=1).astype(np.float32),
+                min=train_responses.min(axis=axis).astype(np.float32),
+                max=train_responses.max(axis=axis).astype(np.float32),
+                median=np.median(train_responses, axis=axis).astype(np.float32)
+            )
+            return ret
+
+        # --- compute statistics
+        log.info('Computing statistics on training dataset')
+        def response_selector(ix): return np.concatenate([r for take, r in zip(ix, responses) if take], axis=0)
+        response_statistics = run_stats(response_selector, types, train_idx, axis=0)
+
+        def input_selector(ix): return np.hstack([r.ravel() for take, r in zip(ix, inputs) if take])
+        input_statistics = run_stats(input_selector, types, train_idx)
+
+        statistics = dict(
+            inputs=input_statistics,
+            responses=response_statistics
+        )
+
+        if include_behavior:
+            # ---- include statistics
+            def behavior_selector(ix): return np.concatenate([r for take, r in zip(ix, behavior) if take], axis=0)
+            behavior_statistics = run_stats(behavior_selector, types, train_idx, axis=0)
+
+            def eye_selector(ix): return np.concatenate([r for take, r in zip(ix, eye_position) if take], axis=0)
+            eye_statistics = run_stats(eye_selector, types, train_idx, axis=0)
+
+            statistics['behavior'] = behavior_statistics
+            statistics['eye_position'] = eye_statistics
+
+        retval = dict(inputs=inputs,
+                      responses=responses,
+                      types=types.astype('S'),
+                      train_idx=train_idx,
+                      val_idx=val_idx,
+                      test_idx=test_idx,
+                      condition_hashes=hashes.astype('S'),
+                      durations=durations.astype(np.float32),
+                      trial_idx=trial_idx.astype(np.uint32),
+                      neurons=neurons,
+                      tiers=tiers.astype('S'),
+                      statistics=statistics
+                      )
+        if include_behavior:
+            retval['behavior'] = behavior
+            retval['eye_position'] = eye_position
+        return retval
 
 
 class AttributeTransformer:
