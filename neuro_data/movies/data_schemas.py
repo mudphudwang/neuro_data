@@ -594,7 +594,7 @@ class ScanDataset(dj.Computed):
         self.insert1(dict(h5_dataset=fpath, **key))
 
     def neurons(self, key=None):
-        key = self.fetch1() if key is None else (InputResponse & key).fetch1(dj.key)
+        key = self.fetch1(dj.key) if key is None else (InputResponse & key).fetch1(dj.key)
         animal_ids, sessions, scan_idx, pipe_versions, segmentation_methods, spike_methods, unit_ids = \
             (ResponseKeys.Unit & key).fetch('animal_id', 'session', 'scan_idx', 'pipe_version',
                                             'segmentation_method', 'spike_method', 'unit_id', order_by='row_id')
@@ -611,11 +611,11 @@ class ScanDataset(dj.Computed):
 
     def eye_table(self, key=None):
         # patch to deal with old eye tracking method
-        key = self.fetch1() if key is None else (InputResponse & key).fetch1(dj.key)
+        key = self.fetch1(dj.key) if key is None else (InputResponse & key).fetch1(dj.key)
         return Eye if Eye & key else Eye2
 
     def compute_data(self, key=None):
-        key = self.fetch1() if key is None else (InputResponse & key).fetch1(dj.key)
+        key = self.fetch1(dj.key) if key is None else (InputResponse & key).fetch1(dj.key)
         log.info('Computing dataset for {}'.format(repr(key)))
 
         # get neurons
