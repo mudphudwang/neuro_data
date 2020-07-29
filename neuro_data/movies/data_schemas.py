@@ -647,9 +647,8 @@ class ScanDataset(dj.Computed):
             response_block = (InputResponse.Response & stim_key).fetch1('responses')
             responses.append(response_block.T.astype(np.float32))
             if include_behavior:
-                pupil, dpupil, treadmill, center = (EyeTable * Treadmill() & key
-                                                    & stim_key).fetch1('pupil', 'dpupil', 'treadmill', 'center')
-
+                pupil, dpupil, treadmill, center = (EyeTable * Treadmill & stim_key).fetch1(
+                    'pupil', 'dpupil', 'treadmill', 'center')
                 behavior.append(np.vstack([pupil, dpupil, treadmill]).T)
                 eye_position.append(center.T)
 
