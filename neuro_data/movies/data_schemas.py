@@ -121,7 +121,7 @@ class Preprocessing(dj.Lookup):
 
     @property
     def contents(self):
-        yield from [[0, 30, 2.5, 36, 64], [1, 10, 2.5, 36, 64]]
+        yield from [[0, 30, 2.5, 36, 64]]
 
 
 @schema
