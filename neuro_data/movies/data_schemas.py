@@ -584,6 +584,7 @@ class ScanDataset(dj.Computed):
     """
 
     def make(self, key):
+        assert ResponseKeys & key, 'ResponseKeys has not been populated'
         assert Eye & key or Eye2 & key, 'Eye/Eye2 has not been populated'
         assert Treadmill & key, 'Treadmill has not been populated'
         fdir = os.path.join('/tmp', self.database, self.table_name, key_hash(key))
