@@ -127,7 +127,7 @@ class Preprocessing(dj.Lookup):
 @schema
 class Tier(dj.Lookup):
     definition = """
-    tier        : varchar(20)
+    tier        : varchar(20)   # data tier
     ---
     """
 
