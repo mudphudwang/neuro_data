@@ -355,9 +355,10 @@ class InputResponse(dj.Computed, FilterMixin, TraceMixin):
     def get_trace_spline(self, key, sampling_period):
         traces, frame_times, trace_keys = self.load_traces_and_frametimes(key)
         log.info('Loaded {} traces'.format(len(traces)))
-
+        median_frame_time = np.median(np.diff(frame_times))
+        log.info('Median frame time: {}'.format(median_frame_time))
+        h_trace = self.get_filter(sampling_period, median_frame_time, 'hamming', warning=False)
         log.info('Generating lowpass filters with cutoff {:.3f}Hz'.format(1 / sampling_period))
-        h_trace = self.get_filter(sampling_period, np.median(np.diff(frame_times)), 'hamming', warning=False)
         # low pass filter
         trace_spline = SplineCurve(
             frame_times, [np.convolve(trace, h_trace, mode='same') for trace in traces], k=1, ext=1)
