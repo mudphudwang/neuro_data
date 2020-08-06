@@ -21,16 +21,23 @@ class TraceMixin:
         ndepth = len(dj.U('z') & (pipe.ScanInfo.Field() & k))
         return (stimulus.Sync() & key).fetch1('frame_times').squeeze()[::ndepth]
 
-    def load_traces_and_frametimes(self, key):
+    def load_traces_and_frametimes(self, key, trace_type='activity'):
         from .data_schemas import MovieScan
-        
+
         pipe = self.load_pipe(key)
         frame_times = self.load_frame_times(key)
 
         soma = pipe.MaskClassification.Type() & dict(type='soma')
 
-        spikes = (dj.U('field', 'channel') * pipe.Activity.Trace() * MovieScan.Unit()
-                  * pipe.ScanSet.UnitInfo() & soma & key)
+        if trace_type == 'activity':
+            spikes = (dj.U('field', 'channel') * pipe.Activity.Trace * MovieScan.Unit
+                      * pipe.ScanSet.UnitInfo & soma & key)
+        elif trace_type == 'fluorescence':
+            spikes = (pipe.Fluorescence.Trace * pipe.ScanSet.Unit * MovieScan.Unit
+                      * pipe.ScanSet.UnitInfo & soma & key)
+        else:
+            raise ValueError('trace_type must be either "activity" or "fluorescence"')
+
         traces, ms_delay, trace_keys = spikes.fetch('trace', 'ms_delay', dj.key,
                                                     order_by='animal_id, session, scan_idx, unit_id')
         delay = np.fromiter(ms_delay / 1000, dtype=np.float)
