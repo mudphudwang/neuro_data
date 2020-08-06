@@ -8,10 +8,14 @@ from .. import logger as log
 
 
 class TraceMixin:
-    def load_frame_times(self, key):
+
+    def load_pipe(self, key):
         pipe = (fuse.Activity() & key).fetch('pipe')
         assert len(np.unique(pipe)) == 1, 'Selection is from different pipelines'
-        pipe = dj.create_virtual_module(pipe[0], 'pipeline_' + pipe[0])
+        return dj.create_virtual_module(pipe[0], 'pipeline_' + pipe[0])
+
+    def load_frame_times(self, key):
+        pipe = self.load_pipe(key)
         k = dict(key)
         k.pop('field', None)
         ndepth = len(dj.U('z') & (pipe.ScanInfo.Field() & k))
@@ -19,14 +23,9 @@ class TraceMixin:
 
     def load_traces_and_frametimes(self, key):
         from .data_schemas import MovieScan
-        # -- find number of recording depths
-        pipe = (fuse.Activity() & key).fetch('pipe')
-        assert len(np.unique(pipe)) == 1, 'Selection is from different pipelines'
-        pipe = dj.create_virtual_module(pipe[0], 'pipeline_' + pipe[0])
-        k = dict(key)
-        k.pop('field', None)
-        ndepth = len(dj.U('z') & (pipe.ScanInfo.Field() & k))
-        frame_times = (stimulus.Sync() & key).fetch1('frame_times').squeeze()[::ndepth]
+        
+        pipe = self.load_pipe(key)
+        frame_times = self.load_frame_times(key)
 
         soma = pipe.MaskClassification.Type() & dict(type='soma')
 
