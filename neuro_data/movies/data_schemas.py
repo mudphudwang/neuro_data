@@ -321,7 +321,8 @@ class ResponseKeys(dj.Computed, TraceMixin):
 
     def make(self, key):
         self.insert1(key)
-        trace_keys = self.load_traces_and_frametimes(key)[-1]
+        trace_keys = (fuse.Activity.Trace * MovieScan.Unit & key).fetch(
+            dj.key, order_by='animal_id, session, scan_idx, unit_id')
         self.Unit().insert([dict(row_id=i, **k) for i, k in enumerate(trace_keys)])
 
 
