@@ -366,6 +366,10 @@ class InputResponse(dj.Computed, FilterMixin, TraceMixin):
             frame_times, [np.convolve(trace, h_trace, mode='same') for trace in traces], k=1, ext=1)
         return trace_spline, trace_keys, frame_times.min(), frame_times.max()
 
+    def median_scan_period(self, key):
+        frame_times = self.load_frame_times(key)
+        return np.median(np.diff(frame_times)).item()
+
     def make(self, scan_key):
         log.info(80 * '-')
         log.info('Populating {}'.format(repr(scan_key)).ljust(80, '-'))
