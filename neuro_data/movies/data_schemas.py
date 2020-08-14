@@ -315,6 +315,7 @@ class ResponseKeys(dj.Computed, TraceMixin):
         definition = """
         -> master
         -> fuse.Activity.Trace
+        ---
         row_id           : int  # row id in the response block
         """
 

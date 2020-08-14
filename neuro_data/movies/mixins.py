@@ -27,14 +27,12 @@ class TraceMixin:
         pipe = self.load_pipe(key)
         frame_times = self.load_frame_times(key)
 
-        soma = pipe.MaskClassification.Type() & dict(type='soma')
-
         if trace_type == 'activity':
             spikes = (dj.U('field', 'channel') * pipe.Activity.Trace * MovieScan.Unit
-                      * pipe.ScanSet.UnitInfo & soma & key)
+                      * pipe.ScanSet.UnitInfo & key)
         elif trace_type == 'fluorescence':
             spikes = (pipe.Fluorescence.Trace * pipe.ScanSet.Unit * MovieScan.Unit
-                      * pipe.ScanSet.UnitInfo & soma & key)
+                      * pipe.ScanSet.UnitInfo & key)
         else:
             raise ValueError('trace_type must be either "activity" or "fluorescence"')
 
