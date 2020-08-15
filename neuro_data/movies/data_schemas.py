@@ -367,7 +367,8 @@ class InputResponse(dj.Computed, FilterMixin, TraceMixin):
         return trace_spline, trace_keys, frame_times.min(), frame_times.max()
 
     def median_scan_period(self, key):
-        frame_times = self.load_frame_times(key)
+        scan_key = (self & key).fetch1(dj.key)
+        frame_times = self.load_frame_times(scan_key)
         return np.median(np.diff(frame_times)).item()
 
     def make(self, scan_key):
