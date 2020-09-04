@@ -731,6 +731,13 @@ class ScanDataset(dj.Computed):
             retval['eye_position'] = eye_position
         return retval
 
+    def valid_trials(self, key=None):
+        key = self.fetch1(dj.key) if key is None else (self & key).fetch1(dj.key)
+        responses = InputResponse.Response & key
+        treadmills = Treadmill & key
+        eyes = (Eye & key) or (Eye2 & key)
+        return (responses * treadmills * eyes).proj()
+
 
 class AttributeTransformer:
     def __init__(self, name, h5_handle, transforms):
