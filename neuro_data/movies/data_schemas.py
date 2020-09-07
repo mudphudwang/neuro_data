@@ -732,7 +732,7 @@ class ScanDataset(dj.Computed):
         return retval
 
     def valid_trials(self, key=None):
-        key = self.fetch1(dj.key) if key is None else (self & key).fetch1(dj.key)
+        key = self.fetch(dj.key) if key is None else (self & key).fetch(dj.key)
         responses = InputResponse.Response & key
         treadmills = Treadmill & key
         eyes = (Eye & key) or (Eye2 & key)
