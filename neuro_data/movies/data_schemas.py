@@ -312,14 +312,14 @@ class ResponseKeys(dj.Computed, TraceMixin):
     class Unit(dj.Part):
         definition = """
         -> master
-        -> fuse.Activity.Trace
+        -> fuse.ScanSet.Unit
         ---
         row_id           : int  # row id in the response block
         """
 
     def make(self, key):
         self.insert1(key)
-        trace_keys = (fuse.Activity.Trace * MovieScan.Unit & key).fetch(
+        trace_keys = (fuse.ScanSet.Unit * MovieScan.Unit & key).fetch(
             dj.key, order_by='animal_id, session, scan_idx, unit_id')
         self.Unit().insert([dict(row_id=i, **k) for i, k in enumerate(trace_keys)])
 
