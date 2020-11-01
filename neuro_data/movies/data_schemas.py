@@ -599,12 +599,12 @@ class ScanDataset(dj.Computed):
         save_dict_to_hdf5(self.compute_data(key), fpath)
         self.insert1(dict(h5_dataset=fpath, **key))
 
-    def neurons(self, key=None):
+    def units(self, key=None):
         key = self.fetch1(dj.key) if key is None else (InputResponse & key).fetch1(dj.key)
         animal_ids, sessions, scan_idx, pipe_versions, segmentation_methods, spike_methods, unit_ids = \
             (ResponseKeys.Unit & key).fetch('animal_id', 'session', 'scan_idx', 'pipe_version',
                                             'segmentation_method', 'spike_method', 'unit_id', order_by='row_id')
-        neurons = dict(
+        units = dict(
             animal_ids=animal_ids.astype(np.uint16),
             sessions=sessions.astype(np.uint8),
             scan_idx=scan_idx.astype(np.uint8),
@@ -613,7 +613,7 @@ class ScanDataset(dj.Computed):
             spike_methods=spike_methods.astype(np.uint8),
             unit_ids=unit_ids.astype(np.uint16)
         )
-        return neurons
+        return units
 
     def eye_table(self, key=None):
         # patch to deal with old eye tracking method
@@ -625,7 +625,7 @@ class ScanDataset(dj.Computed):
         log.info('Computing dataset for {}'.format(repr(key)))
 
         # get neurons
-        neurons = self.neurons(key)
+        neurons = self.units(key)
         assert len(np.unique(neurons['unit_ids'])) == len(neurons['unit_ids']), \
             'unit ids are not unique, do you have more than one preprocessing method?'
 
