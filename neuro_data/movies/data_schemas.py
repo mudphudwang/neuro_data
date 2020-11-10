@@ -380,7 +380,10 @@ class InputResponse(dj.Computed, FilterMixin, TraceMixin):
         trace_spline, _, ftmin, ftmax = self.get_trace_spline(scan_key, sampling_period)
 
         assert ConditionTier & scan_key, 'ConditionTier has not been populated'
-        assert not (MovieClips.key_source & scan_key) - MovieClips, 'There are missing tuples in MovieClips'
+
+        conditions = stimulus.Condition & (stimulus.Trial & scan_key)
+        clips = (conditions * Preprocessing & scan_key).proj()
+        assert not clips - MovieClips, 'MovieClips has not been populated'
 
         flip_times, sample_times, fps0, trial_keys = (MovieScan() * MovieClips() * stimulus.Trial() & scan_key).fetch(
             'flip_times', 'sample_times', 'fps0', dj.key)
