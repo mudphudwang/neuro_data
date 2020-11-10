@@ -259,10 +259,6 @@ class MovieClips(dj.Computed, FilterMixin):
 
         return movie, frame_rate
 
-    @property
-    def key_source(self):
-        return stimulus.Condition() * Preprocessing() & ConditionTier()
-
     def adjust_duration(self, key, base):
         if stimulus.Clip() & key:
             duration, skip_time = map(float, (stimulus.Clip() & key).fetch1('cut_after', 'skip_time'))
