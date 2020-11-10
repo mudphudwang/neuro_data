@@ -223,6 +223,11 @@ class MovieClips(dj.Computed, FilterMixin):
     duration             : float                # duration in seconds
     """
 
+    @property
+    def scan_keys(self):
+        conditions = stimulus.Condition & (stimulus.Trial & MovieScanCandidate)
+        return (conditions * Preprocessing & 'preproc_id=0').proj()
+
     def get_frame_rate(self, key):
         stimulus_type = (stimulus.Condition() & key).fetch1('stimulus_type')
         if stimulus_type == 'stimulus.Clip':
