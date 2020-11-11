@@ -28,9 +28,11 @@ class TraceMixin:
         frame_times = self.load_frame_times(key)
 
         if trace_type == 'activity':
+            log.info('Loading Activity Trace')
             spikes = (dj.U('field', 'channel') * pipe.Activity.Trace * MovieScan.Unit
                       * pipe.ScanSet.UnitInfo & key)
         elif trace_type == 'fluorescence':
+            log.info('Loading Fluorescence Trace')
             spikes = (pipe.Fluorescence.Trace * pipe.ScanSet.Unit * MovieScan.Unit
                       * pipe.ScanSet.UnitInfo & key)
         else:
