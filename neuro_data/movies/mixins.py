@@ -21,31 +21,6 @@ class TraceMixin:
         ndepth = len(dj.U('z') & (pipe.ScanInfo.Field() & k))
         return (stimulus.Sync() & key).fetch1('frame_times').squeeze()[::ndepth]
 
-    def load_traces_and_frametimes(self, key, trace_type='activity'):
-        from .data_schemas import MovieScan
-
-        pipe = self.load_pipe(key)
-        frame_times = self.load_frame_times(key)
-
-        if trace_type == 'activity':
-            log.info('Loading Activity Trace')
-            spikes = (dj.U('field', 'channel') * pipe.Activity.Trace * MovieScan.Unit
-                      * pipe.ScanSet.UnitInfo & key)
-        elif trace_type == 'fluorescence':
-            log.info('Loading Fluorescence Trace')
-            spikes = (pipe.Fluorescence.Trace * pipe.ScanSet.Unit * MovieScan.Unit
-                      * pipe.ScanSet.UnitInfo & key)
-        else:
-            raise ValueError('trace_type must be either "activity" or "fluorescence"')
-
-        traces, ms_delay, trace_keys = spikes.fetch('trace', 'ms_delay', dj.key,
-                                                    order_by='animal_id, session, scan_idx, unit_id')
-        delay = np.fromiter(ms_delay / 1000, dtype=np.float)
-        frame_times = (delay[:, None] + frame_times[None, :])
-        traces = np.vstack([fill_nans(tr.astype(np.float32)).squeeze() for tr in traces])
-        traces, frame_times = self.adjust_trace_len(traces, frame_times)
-        return traces, frame_times, trace_keys
-
     def adjust_trace_len(self, traces, frame_times):
         trace_len, nframes = traces.shape[1], frame_times.shape[1]
         if trace_len < nframes:
